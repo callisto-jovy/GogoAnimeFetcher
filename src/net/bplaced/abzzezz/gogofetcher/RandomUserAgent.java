@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2020. Roman P.
+ * All code is owned by Roman P. APIs are mentioned.
+ * Last modified: 23.12.20, 23:45
+ */
+
 package net.bplaced.abzzezz.gogofetcher;
 
 
