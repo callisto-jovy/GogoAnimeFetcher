@@ -2,7 +2,6 @@ package net.bplaced.abzzezz.gogoanime.tasks;
 
 import com.github.kokorin.jaffree.LogLevel;
 import com.github.kokorin.jaffree.ffmpeg.FFmpeg;
-import com.github.kokorin.jaffree.ffmpeg.FFmpegResult;
 import com.github.kokorin.jaffree.ffmpeg.UrlInput;
 import com.github.kokorin.jaffree.ffmpeg.UrlOutput;
 import net.bplaced.abzzezz.gogoanime.GogoAnimeFetcher;
@@ -17,7 +16,6 @@ import java.nio.channels.Channels;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -30,9 +28,6 @@ public class EpisodeDownloadTask extends TaskExecutor implements Callable<Void> 
     protected final EpisodeDownloadProgressHandler progressHandler;
     private final EpisodeDownloadCallback userCallback;
     protected File outFile;
-    protected FileOutputStream fileOutputStream; //Fileoutputstream, can be closed if canceled
-
-    private FFmpegResult fFmpegResult;
 
     private int totalBytes, progress;
 
@@ -57,10 +52,14 @@ public class EpisodeDownloadTask extends TaskExecutor implements Callable<Void> 
             @Override
             public void onDownloadProgress(final long newReadBytes) {
                 progress += newReadBytes;
+                /*
                 if (totalBytes == -1)
                     ConsoleUtil.displayProgressbar(integer -> integer < progress % 100);
                 else
                     ConsoleUtil.displayProgressbar(progress, totalBytes);
+
+
+                 */
             }
 
             //Receive the initial size & build the notification
@@ -94,34 +93,20 @@ public class EpisodeDownloadTask extends TaskExecutor implements Callable<Void> 
         if (!outDir.exists()) outDir.mkdir();
         this.outFile = new File(outDir, count[2] + ".mp4");
 
-        GogoAnimeFetcher.fetchIDLink(referrals.getString(count[2])).ifPresent(s -> {
+        GogoAnimeFetcher.fetchDownloadLink(referrals.getString(count[2])).ifPresent(api -> {
             try {
-                Optional.ofNullable(GogoAnimeFetcher.getVidURL(s)).ifPresent(api -> {
-                    try {
-                        final String extension = api.substring(api.lastIndexOf(".") + 1);
-                        if (extension.equals("mp4")) {
-                            this.downloadUsingURLConnection(api);
-                        } else if (extension.equals("m3u8")) {
-                            final List<String> ffmpegArguments = new LinkedList<>();
+                final List<String> ffmpegArguments = new LinkedList<>();
 
-                            ffmpegArguments.add("-vcodec");
-                            ffmpegArguments.add("copy");
-                            ffmpegArguments.add("-c:a");
-                            ffmpegArguments.add("copy");
-                            ffmpegArguments.add("-acodec");
-                            ffmpegArguments.add("mp3");
-                            this.fFmpegResult = this.startFFDefaultTask(ffmpegArguments, api);
-                        } else {
-                            progressHandler.onErrorThrown(getError("Unexpected video format"));
-                            return;
-                        }
-                        progressHandler.onDownloadCompleted();
-                    } catch (final StringIndexOutOfBoundsException | IOException e) {
-                        progressHandler.onErrorThrown(getError(e));
-                        e.printStackTrace();
-                    }
-                });
-            } catch (IOException e) {
+                ffmpegArguments.add("-vcodec");
+                ffmpegArguments.add("copy");
+                ffmpegArguments.add("-c:a");
+                ffmpegArguments.add("copy");
+                ffmpegArguments.add("-acodec");
+                ffmpegArguments.add("mp3");
+                this.startFFDefaultTask(ffmpegArguments, api);
+
+                progressHandler.onDownloadCompleted();
+            } catch (final StringIndexOutOfBoundsException | IOException e) {
                 progressHandler.onErrorThrown(getError(e));
                 e.printStackTrace();
             }
@@ -134,29 +119,7 @@ public class EpisodeDownloadTask extends TaskExecutor implements Callable<Void> 
      */
     public void cancelExecution() {
         //Flush and close the stream if needed
-        if (this.fileOutputStream != null) {
-            try {
-                this.fileOutputStream.flush();
-                this.fileOutputStream.close();
-            } catch (final IOException e) {
-                e.printStackTrace();
-            }
-        }
         this.setCancelled(true);
-    }
-
-    private void downloadUsingURLConnection(final String url) throws IOException {
-        final URLConnection connection = URLUtil.createURLConnection(url, 0, 0, new String[]{"User-Agent", Constant.USER_AGENT});
-
-        progressHandler.receiveTotalSize(connection.getContentLength());
-
-        URLUtil.copyFileFromRBC(new RBCWrapper(
-                        Channels.newChannel(connection.getInputStream()),
-                        connection.getContentLength(),
-                        progressHandler::onDownloadProgress
-                ),
-                outFile,
-                fileOutputStream -> this.fileOutputStream = fileOutputStream);
     }
 
     /**
@@ -165,24 +128,30 @@ public class EpisodeDownloadTask extends TaskExecutor implements Callable<Void> 
      * @param ffmpegArguments arguments to supply for ffmpeg
      * @param url             url to get the m3u8-segment count from
      * @param requestHeaders  Request headers for the m3u8 operation
-     * @return the ffmpeg task-id
      * @throws IOException url / connection exceptions from the m3u8-util
      */
-    protected FFmpegResult startFFDefaultTask(final List<String> ffmpegArguments, final String url, final String[]... requestHeaders) throws IOException {
-        progressHandler.receiveTotalSize(-1); //Receive total segment size & set the total to receive size
+    protected void startFFDefaultTask(final List<String> ffmpegArguments, final String url, final String[]... requestHeaders) throws IOException {
+        System.out.println(url);
+       // progressHandler.receiveTotalSize(M3U8Util.getSegments(url, requestHeaders)); //Receive total segment size & set the total to receive size
+
+        System.out.println("Segments: " + totalBytes);
 
         final FFmpeg fFmpeg = FFmpeg
                 .atPath(new File("ffmpeg/bin").toPath())
                 .addInput(UrlInput.fromUrl(url))
                 .addOutput(UrlOutput.toUrl(outFile.getAbsolutePath()));
 
-        fFmpeg.setLogLevel(LogLevel.QUIET);
+        fFmpeg.setLogLevel(LogLevel.INFO);
 
         ffmpegArguments.forEach(fFmpeg::addArgument);
-        fFmpeg.setOutputListener(System.out::println);
-        fFmpeg.setProgressListener(fFmpegProgress -> progressHandler.onDownloadProgress(fFmpegProgress.getFrame()));
+        fFmpeg.setOutputListener(s -> {
+            System.out.println(s);
+            if (s.contains("Opening"))
+                progressHandler.onDownloadProgress(1); //Increment the progress with one (new segment is being opened)
 
-        return fFmpeg.execute();
+            System.out.println(progress);
+        });
+        fFmpeg.execute();
     }
 
     /* Get error message */

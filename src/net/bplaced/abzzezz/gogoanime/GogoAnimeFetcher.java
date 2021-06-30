@@ -70,17 +70,27 @@ public class GogoAnimeFetcher implements GogoAnime {
      * @param referral referral to the site
      * @return the
      */
-    public static Optional<String> fetchIDLink(final String referral) {
+    public static Optional<String> fetchDownloadLink(final String referral) {
         if (referral.isEmpty()) return Optional.empty(); //Empty case, return empty
 
         try {
             final Document episodeDocument = createGogoCdnConnection(referral).get();
 
-            final String src = episodeDocument.selectFirst("iframe").attr("src");
-            final Matcher matcher = PATTERN.matcher(src);
+            final String downloadAPIURL = ("https:" + episodeDocument
+                    .getElementsByClass("play-video")
+                    .get(0)
+                    .select("iframe")
+                    .attr("src")).replace("streaming", "loadserver");
+
+            final Document downloadAPIDocument = Jsoup
+                    .connect(downloadAPIURL)
+                    .userAgent(Constant.USER_AGENT)
+                    .get();
+
+            final Matcher matcher = SOURCE_PATTERN.matcher(downloadAPIDocument.body().toString());
 
             if (matcher.find()) {
-                return Optional.of(String.format(API_URL, matcher.group().substring(3, matcher.group().length() - 1)));
+                return Optional.of(matcher.group());
             } else return Optional.empty();
         } catch (final IOException e) {
             e.printStackTrace();
@@ -96,10 +106,12 @@ public class GogoAnimeFetcher implements GogoAnime {
      * @throws IOException url error
      */
     public static String[] getURLsFromSearch(final String searchQuery) throws IOException {
-        final Document document = Jsoup.connect(String.format(SEARCH_URL, searchQuery)).userAgent(Constant.USER_AGENT).get();
+        final Document document = Jsoup.connect(String.format(FORMATTED_SEARCH_API, searchQuery)).userAgent(Constant.USER_AGENT).get();
         return document.getElementsByClass("name")
                 .stream()
-                .map(element -> BASE_URL + element.select("a").attr("href"))
+                .map(element -> BASE_URL + element
+                        .select("a")
+                        .attr("href"))
                 .toArray(String[]::new);
     }
 
@@ -113,7 +125,7 @@ public class GogoAnimeFetcher implements GogoAnime {
         return Jsoup.connect(url)
                 .userAgent(Constant.USER_AGENT)
                 .header("authority", "gogoanime.so")
-                .referrer("https://gogoanime.so/search.html");
+                .referrer(BASE_SEARCH_API);
     }
 
     /**
@@ -131,7 +143,7 @@ public class GogoAnimeFetcher implements GogoAnime {
     /**
      * Gets the direct video url from the formatted api link
      *
-     * @param in read in lines
+     * @param referral the url
      * @return url to mp4
      */
     public static String getVidURL(final String referral) throws JSONException, IOException {

@@ -1,5 +1,7 @@
 package net.bplaced.abzzezz.gogoanime.util;
 
+import java.util.Scanner;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 public class ConsoleUtil {
@@ -20,5 +22,18 @@ public class ConsoleUtil {
             builder.append('#');
             System.out.print("[" + builder + "] " + CHARS[i % 4] + "\r");
         }
+    }
+
+    public static void list(final String[] strings) {
+        for (int i = 0; i < strings.length; i++) {
+            System.out.printf("(%d) %s%n", i, strings[i]);
+        }
+    }
+
+
+    public static void createOptionsMenu(final String[] options, final Consumer<Integer> selectedOption) {
+        list(options);
+        final Scanner scanner = new Scanner(System.in);
+        selectedOption.accept(Integer.parseInt(scanner.next("[+-]?[0-9]+")));
     }
 }
