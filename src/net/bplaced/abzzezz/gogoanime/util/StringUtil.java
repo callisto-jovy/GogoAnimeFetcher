@@ -17,5 +17,4 @@ public class StringUtil {
         return str.replaceAll("[^0-9\\.]", "");
     }
 
-
 }

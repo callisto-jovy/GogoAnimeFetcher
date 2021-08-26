@@ -146,5 +146,4 @@ public class Main {
     private void print(final String s) {
         System.out.println(s);
     }
-
 }

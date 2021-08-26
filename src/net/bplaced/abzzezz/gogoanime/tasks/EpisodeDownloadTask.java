@@ -148,8 +148,6 @@ public class EpisodeDownloadTask extends TaskExecutor implements Callable<Void> 
             System.out.println(s);
             if (s.contains("Opening"))
                 progressHandler.onDownloadProgress(1); //Increment the progress with one (new segment is being opened)
-
-            System.out.println(progress);
         });
         fFmpeg.execute();
     }

@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class URLUtil {
+
     public static URLConnection createURLConnection(final String urlIn, final int connectionTimeout, final int readTimeout, final String[]... requestProperties) throws IOException {
         return createURLConnection(new URL(urlIn), connectionTimeout, readTimeout, requestProperties);
     }
